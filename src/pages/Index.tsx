@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
-import ThreeCanvas from '@/components/ThreeCanvas';
+import ThreeScene from '@/components/ThreeScene';
 import Timeline from '@/components/Timeline';
 import ObjectsList from '@/components/ObjectsList';
 import TransformControls from '@/components/TransformControls';
 import AssetLibrary from '@/components/AssetLibrary';
 import EffectsPanel from '@/components/EffectsPanel';
+import ExportPanel from '@/components/ExportPanel';
 
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus';
 export type ModelType = 'robot' | 'character' | 'animal' | 'vehicle';
@@ -45,16 +47,20 @@ const Index = () => {
   useEffect(() => {
     if (!isPlaying) return;
 
+    const fps = 60;
     const interval = setInterval(() => {
-      const newTime = currentTime + 0.016;
-      setCurrentTime(newTime);
-      applyAnimation(newTime);
-    }, 16);
+      setCurrentTime((prevTime) => {
+        const newTime = prevTime + (1 / fps);
+        return newTime;
+      });
+    }, 1000 / fps);
 
     return () => clearInterval(interval);
-  }, [isPlaying, currentTime, keyframes]);
+  }, [isPlaying]);
 
-  const applyAnimation = (time: number) => {
+  useEffect(() => {
+    if (keyframes.length === 0 || !isPlaying) return;
+
     const updatedObjects = objects.map(obj => {
       const objKeyframes = keyframes
         .filter(kf => kf.objectId === obj.id)
@@ -62,32 +68,37 @@ const Index = () => {
 
       if (objKeyframes.length === 0) return obj;
 
-      const currentKf = objKeyframes.filter(kf => kf.time <= time).pop();
-      const nextKf = objKeyframes.find(kf => kf.time > time);
+      const positionKfs = objKeyframes.filter(kf => kf.property === 'position');
+      const rotationKfs = objKeyframes.filter(kf => kf.property === 'rotation');
+      const scaleKfs = objKeyframes.filter(kf => kf.property === 'scale');
 
-      if (!currentKf) return obj;
-      if (!nextKf) {
-        return {
-          ...obj,
-          [currentKf.property]: currentKf.value,
-        };
-      }
+      const interpolate = (kfs: Keyframe[], property: 'position' | 'rotation' | 'scale') => {
+        if (kfs.length === 0) return obj[property];
 
-      const progress = (time - currentKf.time) / (nextKf.time - currentKf.time);
-      const interpolated: [number, number, number] = [
-        currentKf.value[0] + (nextKf.value[0] - currentKf.value[0]) * progress,
-        currentKf.value[1] + (nextKf.value[1] - currentKf.value[1]) * progress,
-        currentKf.value[2] + (nextKf.value[2] - currentKf.value[2]) * progress,
-      ];
+        const beforeKf = kfs.filter(kf => kf.time <= currentTime).pop();
+        const afterKf = kfs.find(kf => kf.time > currentTime);
+
+        if (!beforeKf) return kfs[0].value;
+        if (!afterKf) return beforeKf.value;
+
+        const progress = (currentTime - beforeKf.time) / (afterKf.time - beforeKf.time);
+        return [
+          beforeKf.value[0] + (afterKf.value[0] - beforeKf.value[0]) * progress,
+          beforeKf.value[1] + (afterKf.value[1] - beforeKf.value[1]) * progress,
+          beforeKf.value[2] + (afterKf.value[2] - beforeKf.value[2]) * progress,
+        ] as [number, number, number];
+      };
 
       return {
         ...obj,
-        [currentKf.property]: interpolated,
+        position: interpolate(positionKfs, 'position'),
+        rotation: interpolate(rotationKfs, 'rotation'),
+        scale: interpolate(scaleKfs, 'scale'),
       };
     });
 
     setObjects(updatedObjects);
-  };
+  }, [currentTime, keyframes, isPlaying]);
 
   const addObject = (type: PrimitiveType | ModelType, name?: string) => {
     const newObject: SceneObject = {
@@ -172,10 +183,17 @@ const Index = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Icon name="Download" size={16} className="mr-2" />
-            Экспорт
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Icon name="Download" size={16} className="mr-2" />
+                Экспорт
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <ExportPanel objects={objects} keyframes={keyframes} duration={10} />
+            </DialogContent>
+          </Dialog>
           <Button variant="ghost" size="icon">
             <Icon name="Settings" size={20} />
           </Button>
@@ -239,32 +257,13 @@ const Index = () => {
 
         <div className="flex-1 flex flex-col m-2 gap-2">
           <Card className="flex-1 border-border overflow-hidden relative">
-            <ThreeCanvas
+            <ThreeScene
               objects={objects}
               selectedObjectId={selectedObjectId}
               onSelectObject={setSelectedObjectId}
               transformMode={transformMode}
               onUpdateObject={updateObject}
             />
-            
-            <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-sm border border-border rounded-lg p-3 text-xs space-y-1">
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">G</kbd>
-                <span className="text-muted-foreground">Перемещение</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">R</kbd>
-                <span className="text-muted-foreground">Вращение</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">S</kbd>
-                <span className="text-muted-foreground">Масштаб</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Del</kbd>
-                <span className="text-muted-foreground">Удалить</span>
-              </div>
-            </div>
           </Card>
 
           <Timeline
