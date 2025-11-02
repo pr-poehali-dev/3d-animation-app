@@ -126,6 +126,82 @@ const ThreeCanvas = ({
           ctx.strokeStyle = '#000000';
           ctx.lineWidth = 1;
           ctx.strokeRect(-size / 3, -size / 2, size / 1.5, size);
+        } else if (obj.type === 'robot' || obj.type === 'character' || obj.type === 'animal' || obj.type === 'vehicle') {
+          ctx.fillStyle = obj.color;
+          ctx.fillRect(-size / 2, -size / 2, size, size * 1.2);
+          ctx.fillStyle = '#000';
+          ctx.font = `${size * 0.6}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const emoji = obj.type === 'robot' ? '🤖' : obj.type === 'character' ? '🧍' : obj.type === 'animal' ? '🐕' : '🚗';
+          ctx.fillText(emoji, 0, 0);
+          
+          if (isSelected) {
+            ctx.strokeStyle = '#8B5CF6';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(-size / 2, -size / 2, size, size * 1.2);
+          }
+        } else if (obj.isEffect) {
+          const effectSize = size * 1.5;
+          ctx.globalAlpha = 0.8;
+          
+          if (obj.type === 'fire') {
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, effectSize / 2);
+            gradient.addColorStop(0, '#FF4500');
+            gradient.addColorStop(0.5, '#FFA500');
+            gradient.addColorStop(1, 'rgba(255, 69, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, effectSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (obj.type === 'explosion') {
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, effectSize / 2);
+            gradient.addColorStop(0, '#FFF');
+            gradient.addColorStop(0.3, '#FFA500');
+            gradient.addColorStop(0.6, '#FF4500');
+            gradient.addColorStop(1, 'rgba(255, 69, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, effectSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (obj.type === 'smoke') {
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, effectSize / 2);
+            gradient.addColorStop(0, 'rgba(136, 136, 136, 0.8)');
+            gradient.addColorStop(1, 'rgba(136, 136, 136, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, effectSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (obj.type === 'sparkle') {
+            ctx.fillStyle = '#FFD700';
+            for (let i = 0; i < 8; i++) {
+              const angle = (i * Math.PI) / 4;
+              ctx.fillRect(Math.cos(angle) * effectSize / 3, Math.sin(angle) * effectSize / 3, 4, 4);
+            }
+          } else if (obj.type === 'rain') {
+            ctx.strokeStyle = '#4169E1';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 10; i++) {
+              const rx = (Math.random() - 0.5) * effectSize;
+              const ry = (Math.random() - 0.5) * effectSize;
+              ctx.beginPath();
+              ctx.moveTo(rx, ry);
+              ctx.lineTo(rx, ry + 10);
+              ctx.stroke();
+            }
+          }
+          
+          ctx.globalAlpha = 1;
+          
+          if (isSelected) {
+            ctx.strokeStyle = '#8B5CF6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(0, 0, effectSize / 2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
         }
 
         ctx.restore();

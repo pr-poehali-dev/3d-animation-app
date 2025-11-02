@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
-import { SceneObject, Keyframe } from '@/pages/Index';
+import { Keyframe } from '@/pages/Index';
 import Icon from '@/components/ui/icon';
 
 interface TimelineProps {
   currentTime: number;
   onTimeChange: (time: number) => void;
   keyframes: Keyframe[];
-  objects: SceneObject[];
   isPlaying: boolean;
   onPlayToggle: () => void;
   onAddKeyframe: () => void;
@@ -19,22 +18,11 @@ const Timeline = ({
   currentTime,
   onTimeChange,
   keyframes,
-  objects,
   isPlaying,
   onPlayToggle,
   onAddKeyframe,
 }: TimelineProps) => {
   const [duration, setDuration] = useState(10);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const interval = setInterval(() => {
-      onTimeChange((currentTime + 0.1) % duration);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [isPlaying, currentTime, duration, onTimeChange]);
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);

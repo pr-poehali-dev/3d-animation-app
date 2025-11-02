@@ -1,25 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
 import ThreeCanvas from '@/components/ThreeCanvas';
 import Timeline from '@/components/Timeline';
 import ObjectsList from '@/components/ObjectsList';
 import TransformControls from '@/components/TransformControls';
+import AssetLibrary from '@/components/AssetLibrary';
+import EffectsPanel from '@/components/EffectsPanel';
 
 export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus';
+export type ModelType = 'robot' | 'character' | 'animal' | 'vehicle';
+export type EffectType = 'fire' | 'explosion' | 'smoke' | 'sparkle' | 'rain';
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 
 export interface SceneObject {
   id: string;
-  type: PrimitiveType;
+  type: PrimitiveType | ModelType | EffectType;
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
   color: string;
   name: string;
+  isEffect?: boolean;
+  effectDuration?: number;
 }
 
 export interface Keyframe {
@@ -37,7 +42,54 @@ const Index = () => {
   const [keyframes, setKeyframes] = useState<Keyframe[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const addObject = (type: PrimitiveType) => {
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const interval = setInterval(() => {
+      const newTime = currentTime + 0.016;
+      setCurrentTime(newTime);
+      applyAnimation(newTime);
+    }, 16);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, currentTime, keyframes]);
+
+  const applyAnimation = (time: number) => {
+    const updatedObjects = objects.map(obj => {
+      const objKeyframes = keyframes
+        .filter(kf => kf.objectId === obj.id)
+        .sort((a, b) => a.time - b.time);
+
+      if (objKeyframes.length === 0) return obj;
+
+      const currentKf = objKeyframes.filter(kf => kf.time <= time).pop();
+      const nextKf = objKeyframes.find(kf => kf.time > time);
+
+      if (!currentKf) return obj;
+      if (!nextKf) {
+        return {
+          ...obj,
+          [currentKf.property]: currentKf.value,
+        };
+      }
+
+      const progress = (time - currentKf.time) / (nextKf.time - currentKf.time);
+      const interpolated: [number, number, number] = [
+        currentKf.value[0] + (nextKf.value[0] - currentKf.value[0]) * progress,
+        currentKf.value[1] + (nextKf.value[1] - currentKf.value[1]) * progress,
+        currentKf.value[2] + (nextKf.value[2] - currentKf.value[2]) * progress,
+      ];
+
+      return {
+        ...obj,
+        [currentKf.property]: interpolated,
+      };
+    });
+
+    setObjects(updatedObjects);
+  };
+
+  const addObject = (type: PrimitiveType | ModelType, name?: string) => {
     const newObject: SceneObject = {
       id: `obj-${Date.now()}`,
       type,
@@ -45,10 +97,34 @@ const Index = () => {
       rotation: [0, 0, 0],
       scale: [1, 1, 1],
       color: '#0EA5E9',
-      name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${objects.length + 1}`,
+      name: name || `${type.charAt(0).toUpperCase() + type.slice(1)} ${objects.length + 1}`,
     };
     setObjects([...objects, newObject]);
     setSelectedObjectId(newObject.id);
+  };
+
+  const addEffect = (type: EffectType, duration: number = 2) => {
+    const newEffect: SceneObject = {
+      id: `effect-${Date.now()}`,
+      type,
+      position: [0, 1, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      color: type === 'fire' ? '#FF4500' : type === 'explosion' ? '#FFA500' : '#888888',
+      name: `${type.charAt(0).toUpperCase() + type.slice(1)}`,
+      isEffect: true,
+      effectDuration: duration,
+    };
+    
+    setObjects([...objects, newEffect]);
+    setSelectedObjectId(newEffect.id);
+
+    setTimeout(() => {
+      setObjects(prev => prev.filter(obj => obj.id !== newEffect.id));
+      if (selectedObjectId === newEffect.id) {
+        setSelectedObjectId(null);
+      }
+    }, duration * 1000);
   };
 
   const updateObject = (id: string, updates: Partial<SceneObject>) => {
@@ -57,6 +133,7 @@ const Index = () => {
 
   const deleteObject = (id: string) => {
     setObjects(objects.filter(obj => obj.id !== id));
+    setKeyframes(keyframes.filter(kf => kf.objectId !== id));
     if (selectedObjectId === id) {
       setSelectedObjectId(null);
     }
@@ -68,14 +145,16 @@ const Index = () => {
     const selectedObject = objects.find(obj => obj.id === selectedObjectId);
     if (!selectedObject) return;
 
-    const newKeyframe: Keyframe = {
+    const properties: ('position' | 'rotation' | 'scale')[] = ['position', 'rotation', 'scale'];
+    
+    const newKeyframes = properties.map(property => ({
       time: currentTime,
       objectId: selectedObjectId,
-      property: transformMode === 'translate' ? 'position' : transformMode === 'rotate' ? 'rotation' : 'scale',
-      value: selectedObject[transformMode === 'translate' ? 'position' : transformMode === 'rotate' ? 'rotation' : 'scale'],
-    };
+      property,
+      value: [...selectedObject[property]] as [number, number, number],
+    }));
 
-    setKeyframes([...keyframes, newKeyframe]);
+    setKeyframes([...keyframes, ...newKeyframes]);
   };
 
   const selectedObject = objects.find(obj => obj.id === selectedObjectId);
@@ -88,11 +167,15 @@ const Index = () => {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Icon name="Box" size={20} className="text-primary-foreground" />
             </div>
-            <h1 className="text-xl font-semibold">3D Animator</h1>
+            <h1 className="text-xl font-semibold">3D Animator Pro</h1>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm">
+            <Icon name="Download" size={16} className="mr-2" />
+            Экспорт
+          </Button>
           <Button variant="ghost" size="icon">
             <Icon name="Settings" size={20} />
           </Button>
@@ -105,7 +188,7 @@ const Index = () => {
             variant={transformMode === 'translate' ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setTransformMode('translate')}
-            title="Переместить"
+            title="Переместить (G)"
           >
             <Icon name="Move" size={20} />
           </Button>
@@ -113,7 +196,7 @@ const Index = () => {
             variant={transformMode === 'rotate' ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setTransformMode('rotate')}
-            title="Вращать"
+            title="Вращать (R)"
           >
             <Icon name="RotateCw" size={20} />
           </Button>
@@ -121,7 +204,7 @@ const Index = () => {
             variant={transformMode === 'scale' ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setTransformMode('scale')}
-            title="Масштаб"
+            title="Масштаб (S)"
           >
             <Icon name="Maximize" size={20} />
           </Button>
@@ -163,13 +246,31 @@ const Index = () => {
               transformMode={transformMode}
               onUpdateObject={updateObject}
             />
+            
+            <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-sm border border-border rounded-lg p-3 text-xs space-y-1">
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 bg-muted rounded text-xs">G</kbd>
+                <span className="text-muted-foreground">Перемещение</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 bg-muted rounded text-xs">R</kbd>
+                <span className="text-muted-foreground">Вращение</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 bg-muted rounded text-xs">S</kbd>
+                <span className="text-muted-foreground">Масштаб</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 bg-muted rounded text-xs">Del</kbd>
+                <span className="text-muted-foreground">Удалить</span>
+              </div>
+            </div>
           </Card>
 
           <Timeline
             currentTime={currentTime}
             onTimeChange={setCurrentTime}
             keyframes={keyframes}
-            objects={objects}
             isPlaying={isPlaying}
             onPlayToggle={() => setIsPlaying(!isPlaying)}
             onAddKeyframe={addKeyframe}
@@ -178,14 +279,18 @@ const Index = () => {
 
         <Card className="w-80 m-2 border-border overflow-hidden">
           <Tabs defaultValue="objects" className="h-full flex flex-col">
-            <TabsList className="w-full rounded-none border-b">
-              <TabsTrigger value="objects" className="flex-1">
-                <Icon name="Layers" size={16} className="mr-2" />
-                Объекты
+            <TabsList className="w-full rounded-none border-b grid grid-cols-4">
+              <TabsTrigger value="objects">
+                <Icon name="Layers" size={16} />
               </TabsTrigger>
-              <TabsTrigger value="properties" className="flex-1">
-                <Icon name="Sliders" size={16} className="mr-2" />
-                Свойства
+              <TabsTrigger value="properties">
+                <Icon name="Sliders" size={16} />
+              </TabsTrigger>
+              <TabsTrigger value="library">
+                <Icon name="Package" size={16} />
+              </TabsTrigger>
+              <TabsTrigger value="effects">
+                <Icon name="Sparkles" size={16} />
               </TabsTrigger>
             </TabsList>
 
@@ -210,6 +315,14 @@ const Index = () => {
                   <p>Выберите объект</p>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="library" className="flex-1 overflow-auto">
+              <AssetLibrary onAddModel={addObject} />
+            </TabsContent>
+
+            <TabsContent value="effects" className="flex-1 overflow-auto">
+              <EffectsPanel onAddEffect={addEffect} />
             </TabsContent>
           </Tabs>
         </Card>
